@@ -3,77 +3,68 @@ import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 import google.generativeai as genai
+import os
 
 # -----------------------------
 # Gemini setup
 # -----------------------------
-GEMINI_API_KEY = "AIzaSyC1Uv1HfygRtOP9OlzDdMm5cFv7FiGJxF0"
+
+# Read API key from environment
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
-
 model = genai.GenerativeModel("gemini-3-flash-preview")
-
 # -----------------------------
-# Streamlit UI
+# Streamlit config
 # -----------------------------
 st.set_page_config(page_title="AI BI Agent", layout="wide")
-st.title("AI Business Intelligence Query Agent")
-
-# Connect database
-conn = sqlite3.connect("sales.db")
-
-def run_sql(sql):
-    try:
-        return pd.read_sql(sql, conn)
-    except Exception as e:
-        st.error(f"SQL Error: {e}")
-        return None
+st.title("AI Business Intelligence Chat Agent")
 
 # -----------------------------
-# AI: Text → SQL using Gemini
+# Database connection
+# -----------------------------
+conn = sqlite3.connect("sales.db")
+
+# -----------------------------
+# Run multiple SQL statements
+# -----------------------------
+def run_multiple_sql(sql_text):
+    queries = [q.strip() for q in sql_text.split(";") if q.strip()]
+    results = []
+
+    for q in queries:
+        try:
+            df = pd.read_sql(q, conn)
+            results.append((q, df))
+        except Exception as e:
+            results.append((q, str(e)))
+
+    return results
+
+# -----------------------------
+# Text to SQL (Gemini)
 # -----------------------------
 def text_to_sql(user_query):
     schema = """
     Table: sales_data
 
     Columns:
-    ORDERNUMBER
-    QUANTITYORDERED
-    PRICEEACH
-    ORDERLINENUMBER
-    SALES
-    ORDERDATE
-    STATUS
-    QTR_ID
-    MONTH_ID
-    YEAR_ID
-    PRODUCTLINE
-    MSRP
-    PRODUCTCODE
-    CUSTOMERNAME
-    PHONE
-    ADDRESSLINE1
-    ADDRESSLINE2
-    CITY
-    STATE
-    POSTALCODE
-    COUNTRY
-    TERRITORY
-    CONTACTLASTNAME
-    CONTACTFIRSTNAME
+    ORDERNUMBER, QUANTITYORDERED, PRICEEACH, ORDERLINENUMBER,
+    SALES, ORDERDATE, STATUS, QTR_ID, MONTH_ID, YEAR_ID,
+    PRODUCTLINE, MSRP, PRODUCTCODE, CUSTOMERNAME, PHONE,
+    ADDRESSLINE1, ADDRESSLINE2, CITY, STATE, POSTALCODE,
+    COUNTRY, TERRITORY, CONTACTLASTNAME, CONTACTFIRSTNAME,
     DEALSIZE
     """
 
     prompt = f"""
-    You are an expert SQL generator.
-
-    Convert the user question into a valid SQLite SQL query.
+    Convert the following question into valid SQLite SQL.
 
     Rules:
     - Use only table: sales_data
-    - Use only the columns listed
-    - Return ONLY the SQL query
-    - No explanation
-    - SQLite syntax only
+    - Use only provided columns
+    - You may return one or more SQL statements
+    - Separate multiple queries using semicolons
+    - Do not explain anything
 
     {schema}
 
@@ -82,32 +73,145 @@ def text_to_sql(user_query):
     """
 
     response = model.generate_content(prompt)
-    sql = response.text.strip()
-
-    return sql
+    return response.text.strip()
 
 # -----------------------------
-# User input
+# Auto chart selection
 # -----------------------------
-query = st.text_input("Ask any business question:")
+def auto_chart(df):
+    if len(df.columns) < 2:
+        return None
 
-if query:
-    with st.spinner("Generating SQL using Gemini..."):
-        sql_query = text_to_sql(query)
+    x = df.columns[0]
+    y = df.columns[1]
 
-    st.subheader("Generated SQL")
-    st.code(sql_query, language="sql")
+    if "year" in x.lower() or "month" in x.lower():
+        return ("line", x, y)
 
-    result = run_sql(sql_query)
+    return ("bar", x, y)
 
-    if result is not None:
-        st.subheader("Results")
-        st.dataframe(result, use_container_width=True)
+# -----------------------------
+# AI Insights
+# -----------------------------
+def generate_insights(df, question):
+    summary = df.head(10).to_string()
 
-        # Plot if suitable
-        if len(result.columns) >= 2 and len(result) > 1:
-            fig, ax = plt.subplots()
-            result.plot(kind="bar", x=result.columns[0], y=result.columns[1], ax=ax)
-            st.pyplot(fig)
+    prompt = f"""
+    You are a business analyst.
+
+    The user asked:
+    {question}
+
+    Here is the result data:
+    {summary}
+
+    Provide 2–3 short business insights.
+    """
+
+    response = model.generate_content(prompt)
+    return response.text
+
+# -----------------------------
+# Chat memory
+# -----------------------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+
+# -----------------------------
+# Chat input
+# -----------------------------
+user_query = st.chat_input("Ask a business question...")
+
+if user_query:
+    # Show user message
+    st.session_state.messages.append(
+        {"role": "user", "content": user_query}
+    )
+    with st.chat_message("user"):
+        st.write(user_query)
+
+    # Generate SQL
+    with st.spinner("Generating SQL..."):
+        sql_query = text_to_sql(user_query)
+
+    with st.chat_message("assistant"):
+        st.subheader("Generated SQL")
+        st.code(sql_query, language="sql")
+
+        # Run SQL
+        results = run_multiple_sql(sql_query)
+
+        for i, (query, result) in enumerate(results, 1):
+            st.subheader(f"Result {i}")
+            st.code(query, language="sql")
+
+            if isinstance(result, pd.DataFrame):
+                st.dataframe(result, use_container_width=True)
+
+                # -----------------------------
+                # Auto chart
+                # -----------------------------
+                chart = auto_chart(result)
+                fig = None
+
+                if chart:
+                    chart_type, x, y = chart
+                    fig, ax = plt.subplots()
+
+                    if chart_type == "line":
+                        result.plot(kind="line", x=x, y=y, ax=ax)
+                    else:
+                        result.plot(kind="bar", x=x, y=y, ax=ax)
+
+                    st.pyplot(fig)
+
+                # -----------------------------
+                # AI Insights
+                # -----------------------------
+                with st.spinner("Generating insights..."):
+                    insights = generate_insights(result, user_query)
+
+                st.subheader("AI Insights")
+                st.write(insights)
+
+                # -----------------------------
+                # Export options
+                # -----------------------------
+                st.subheader("Download Report")
+
+                # CSV download
+                csv = result.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="Download CSV",
+                    data=csv,
+                    file_name=f"report_{i}.csv",
+                    mime="text/csv"
+                )
+
+                # Chart download
+                if fig:
+                    chart_path = f"chart_{i}.png"
+                    fig.savefig(chart_path)
+
+                    with open(chart_path, "rb") as file:
+                        st.download_button(
+                            label="Download Chart",
+                            data=file,
+                            file_name=f"chart_{i}.png",
+                            mime="image/png"
+                        )
+
+            else:
+                st.error(result)
+
+    # Save assistant response
+    st.session_state.messages.append(
+        {"role": "assistant", "content": "Response generated"}
+    )
 
 conn.close()
