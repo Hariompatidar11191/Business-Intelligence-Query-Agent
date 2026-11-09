@@ -86,7 +86,7 @@ def run_multiple_sql(sql_text: str):
     with get_connection() as conn:
         for query in queries:
             # Only allow read-only SELECT / WITH queries.
-            if not re.match(r"^(SELECT|WITH)\\b", query, flags=re.IGNORECASE):
+            if not re.match(r"^(SELECT|WITH)\b", query, flags=re.IGNORECASE):
                 results.append((query, "Only read-only SELECT queries are allowed."))
                 continue
             try:
@@ -272,7 +272,7 @@ if user_query:
                     assistant_summary.append(f"Result {index}: {result}")
 
         st.session_state.messages.append(
-            {"role": "assistant", "content": "\\n".join(assistant_summary) or "Response generated."}
+            {"role": "assistant", "content": "\n".join(assistant_summary) or "Response generated."}
         )
 
     except Exception as exc:
