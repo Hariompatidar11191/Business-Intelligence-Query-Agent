@@ -1,6 +1,7 @@
 import os
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -83,7 +84,7 @@ def run_multiple_sql(sql_text: str):
     if not queries:
         return [("", "Gemini did not generate a SQL query.")]
 
-    with get_connection() as conn:
+    with closing(get_connection()) as conn:
         for query in queries:
             # Only allow read-only SELECT / WITH queries.
             if not re.match(r"^(SELECT|WITH)\b", query, flags=re.IGNORECASE):
