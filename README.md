@@ -1,95 +1,88 @@
-﻿# Business-Intelligence-Query-Agent
-
 # AI Business Intelligence Query Agent
 
-An AI-powered business analytics tool that converts natural language queries into SQL, executes them on a sales database, and displays results as tables and charts.
+An AI-powered business analytics application that converts natural-language questions into SQLite queries using Gemini, executes them against a sales database, and presents the results as tables, charts, and short business insights.
 
 ## Features
-- Natural language to SQL using Gemini API
-- Automatic data retrieval from SQLite database
-- Interactive charts and tables
-- Streamlit web interface
 
-## Example Queries
-- Total sales
-- Sales by country
-- Top customers by sales
-- Monthly sales in 2004
-- Average price by productline
+- Natural-language-to-SQL with the Google Gemini API
+- SQLite database querying
+- Read-only SQL execution to protect the database
+- Automatic chart selection with Matplotlib
+- AI-generated business insights
+- CSV and chart downloads
+- Streamlit chat interface
 
-## Tech Stack
+## Technology
+
 - Python
 - Streamlit
 - SQLite
-- Gemini API
 - Pandas
 - Matplotlib
+- Google Gen AI SDK (`google-genai`)
+- Gemini 3.8 Flash (`gemini-3.8-flash`)
 
-## Run Locally
-Install dependencies:
+## Project files
 
+```
+.
+├── app.py
+├── requirements.txt
+├── sales.db
+├── sales_data_sample.csv
+└── README.md
+```
 
-AI Business Intelligence Query Agent
+## Run locally
 
-An AI-powered analytics tool that converts natural language questions into SQL queries using the Google Gemini API, executes them on a sales database, and displays results as interactive tables and charts.
+1. Create and activate a Python virtual environment.
+2. Install dependencies:
 
-This project demonstrates how large language models can be used to build intelligent business analytics systems without manually writing SQL.
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Project Overview
+3. Create `.streamlit/secrets.toml`:
 
-Traditional business intelligence tools require users to:
+   ```toml
+   GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+   ```
 
-Know SQL
+   Alternatively, set the `GEMINI_API_KEY` environment variable.
 
-Understand database schemas
+4. Start the app:
 
-Manually build queries
+   ```bash
+   streamlit run app.py
+   ```
 
-This project solves that problem by:
+## Deploy on Streamlit Community Cloud
 
-Accepting a question in plain English
+1. Connect this GitHub repository to Streamlit Community Cloud.
+2. Set the app entry point to `app.py`.
+3. Open **App settings → Secrets**.
+4. Add the following TOML secret and save:
 
-Using Gemini AI to convert it into SQL
+   ```toml
+   GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+   ```
 
-Running the SQL on a sales database
+5. Streamlit will install packages from `requirements.txt` and redeploy the app.
 
-Displaying the results as a table and chart
+Never commit your API key or `.streamlit/secrets.toml` to GitHub. If an API key was exposed, revoke it and generate a replacement in Google AI Studio.
 
-BI_Query_Agent
-│
-├── csv_to_sql.ipynb      # Converts CSV data into SQLite database
-├── sales.db              # Generated SQLite database
-├── app.py                # Main Streamlit AI agent
-├── requirements.txt      # Python dependencies
-└── README.md             # Project documentation
+## Example questions
 
+- What is the total sales revenue?
+- Show sales by product line.
+- Which country generates the highest revenue?
+- Show monthly sales trends.
+- Which customers have generated the highest sales?
 
-#How the System Works
+## Model configuration
 
-User enters a question:  "Show total sales by country" 
-Gemini receives:
+The app defaults to the stable model ID `gemini-3.8-flash`. To select another supported Gemini model, set the `GEMINI_MODEL` environment variable or Streamlit secret and confirm the model is enabled for your API key.
 
-The user’s question
+## Data protection
 
-The database schema
-
-Gemini generates SQL:  SELECT COUNTRY, SUM(SALES)
-FROM sales_data
-GROUP BY COUNTRY;
-
-The app:
-
-Executes the SQL query
-
-Retrieves results from the database
-
-Displays them as:
-
-Table
-
-Chart
-
-Natural language → SQL query
-
-
-
+The app opens `sales.db` in read-only mode and accepts only read-only SQL queries. Keep a backup of your database before changing or replacing it.
