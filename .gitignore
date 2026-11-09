@@ -1,0 +1,14 @@
+# Secrets and local configuration
+.streamlit/secrets.toml
+.env
+.env.*
+!.env.example
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local generated charts
+chart_*.png
