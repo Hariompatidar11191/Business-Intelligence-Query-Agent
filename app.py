@@ -28,7 +28,20 @@ def get_api_key():
 
 
 GEMINI_API_KEY = get_api_key()
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+# Primary model followed by stable fallbacks. Override the primary with
+# GEMINI_MODEL if needed; the remaining models are tried automatically.
+try:
+    configured_model = st.secrets.get("GEMINI_MODEL")
+except Exception:
+    configured_model = None
+configured_model = configured_model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+
+MODEL_FALLBACKS = list(dict.fromkeys([
+    configured_model,
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+]))
 
 if not GEMINI_API_KEY:
     st.error(
@@ -41,15 +54,50 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def generate_text(prompt: str) -> str:
-    """Call Gemini through the supported Google Gen AI SDK."""
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=prompt,
+    """Try the primary Gemini model, then fall back on transient capacity errors."""
+    failures = []
+
+    for model_name in MODEL_FALLBACKS:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            generated_text = response.text
+            if not generated_text:
+                raise RuntimeError("Gemini returned an empty response.")
+
+            if model_name != MODEL_FALLBACKS[0]:
+                st.info(f"Primary model was unavailable. Response generated with {model_name}.")
+            return generated_text.strip()
+
+        except Exception as exc:
+            error_code = (
+                getattr(exc, "code", None)
+                or getattr(exc, "status_code", None)
+            )
+            error_message = str(exc)
+            is_capacity_error = (
+                error_code in (429, 500, 503, 504)
+                or any(code in error_message for code in (
+                    "429", "500", "503", "504",
+                    "RESOURCE_EXHAUSTED", "UNAVAILABLE",
+                    "INTERNAL", "DEADLINE_EXCEEDED",
+                ))
+            )
+            failures.append(f"{model_name}: {error_message}")
+
+            # Invalid API keys, permissions, and other permanent errors will
+            # not be fixed by switching models, so stop and report them.
+            if not is_capacity_error:
+                raise RuntimeError(
+                    f"Gemini request failed for {model_name}: {error_message}"
+                ) from exc
+
+    raise RuntimeError(
+        "All configured Gemini models are currently unavailable. "
+        "Please retry shortly. Details: " + " | ".join(failures)
     )
-    text = response.text
-    if not text:
-        raise RuntimeError("Gemini returned an empty response. Please retry.")
-    return text.strip()
 
 
 # -----------------------------
@@ -198,7 +246,7 @@ if user_query:
         st.write(user_query)
 
     try:
-        with st.spinner(f"Generating SQL with {MODEL_NAME}..."):
+        with st.spinner("Generating SQL with Gemini..."):
             sql_query = text_to_sql(user_query)
 
         with st.chat_message("assistant"):
