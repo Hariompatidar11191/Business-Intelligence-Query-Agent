@@ -1,3 +1,4 @@
+
 # Secrets and local configuration
 .streamlit/secrets.toml
 .env
@@ -9,6 +10,10 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Local databases
+sales.db
+chat_memory.db
 
 # Local generated charts
 chart_*.png
