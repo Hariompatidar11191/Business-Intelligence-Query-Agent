@@ -226,9 +226,31 @@ if not PROVIDERS:
              "CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN.")
     st.stop()
 if not DB_PATH.exists():
-    st.error(f"Database not found: {DB_PATH}")
+    try:
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve().parent / "create_database.py")],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if result.returncode != 0:
+            st.error("Database creation failed.")
+            st.code(result.stderr or result.stdout)
+            st.stop()
+
+    except Exception as exc:
+        st.error(f"Database initialization failed: {exc}")
+        st.stop()
+
+if not DB_PATH.exists():
+    st.error(f"Database not found after initialization: {DB_PATH}")
     st.stop()
 
+    
 # ----------------------------------------------------------------------
 # Database safety: read-only + column blocklist
 # ----------------------------------------------------------------------
